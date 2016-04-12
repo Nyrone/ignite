@@ -218,6 +218,9 @@ public class BinaryReaderExImpl implements BinaryReader, BinaryRawReaderEx, Bina
             schemaId = in.readInt();
             int offset = in.readInt();
 
+            // TODO
+            in.readInt(); // Partition.
+
             // Get trivial flag values.
             userType = BinaryUtils.isUserType(flags);
             fieldIdLen = BinaryUtils.fieldIdLength(flags);

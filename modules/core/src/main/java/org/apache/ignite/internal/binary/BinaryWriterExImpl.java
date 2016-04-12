@@ -313,6 +313,9 @@ public class BinaryWriterExImpl implements BinaryWriter, BinaryRawWriterEx, Obje
         out.unsafeWriteInt(finalSchemaId);
         out.unsafeWriteInt(offset);
 
+        // TODO
+        out.unsafeWriteInt(-1);
+
         out.unsafePosition(retPos);
     }
 

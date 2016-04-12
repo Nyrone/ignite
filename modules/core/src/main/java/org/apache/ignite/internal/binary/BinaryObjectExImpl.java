@@ -137,6 +137,8 @@ public abstract class BinaryObjectExImpl implements BinaryObjectEx {
                 byte[] otherArr = otherPo.array();
 
                 for (int i = start(), j = otherPo.start(); i < end; i++, j++) {
+                    if (i >= 24 && i < 28)
+                        continue;
                     if (arr[i] != otherArr[j])
                         return false;
                 }

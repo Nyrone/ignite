@@ -210,8 +210,10 @@ public class GridBinaryMarshaller {
     /** Schema or raw offset position. */
     public static final int SCHEMA_OR_RAW_OFF_POS = 20;
 
+    public static final int PARTITION_POS = 24;
+
     /** */
-    public static final byte DFLT_HDR_LEN = 24;
+    public static final byte DFLT_HDR_LEN = 28;
 
     /** */
     private final BinaryContext ctx;
