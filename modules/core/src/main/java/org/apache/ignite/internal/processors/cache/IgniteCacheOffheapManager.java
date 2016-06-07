@@ -74,7 +74,7 @@ public interface IgniteCacheOffheapManager extends GridCacheManager {
      * @return Data store.
      * @throws IgniteCheckedException If failed.
      */
-    public CacheDataStore createCacheDataStore(int p, @Nullable GridDhtLocalPartition part) throws IgniteCheckedException;
+    public CacheDataStore createCacheDataStore(int p, CacheDataStore.Listener lsnr) throws IgniteCheckedException;
 
     /**
      * TODO: GG-10884, used on only from initialValue.
@@ -223,5 +223,20 @@ public interface IgniteCacheOffheapManager extends GridCacheManager {
          * @throws IgniteCheckedException If failed.
          */
         public GridCursor<? extends CacheDataRow> cursor() throws IgniteCheckedException;
+
+        /**
+         * Data store listener.
+         */
+        interface Listener {
+            /**
+             * On new entry inserted.
+             */
+            void onInsert();
+
+            /**
+             * On entry removed.
+             */
+            void onRemove();
+        }
     }
 }
