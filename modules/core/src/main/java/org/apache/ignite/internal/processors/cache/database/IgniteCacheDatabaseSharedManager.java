@@ -18,6 +18,7 @@
 package org.apache.ignite.internal.processors.cache.database;
 
 import org.apache.ignite.IgniteCheckedException;
+import org.apache.ignite.configuration.CacheConfiguration;
 import org.apache.ignite.configuration.DatabaseConfiguration;
 import org.apache.ignite.events.DiscoveryEvent;
 import org.apache.ignite.internal.IgniteInternalFuture;
@@ -29,6 +30,7 @@ import org.apache.ignite.internal.pagemem.backup.BackupFuture;
 import org.apache.ignite.internal.pagemem.PageMemory;
 import org.apache.ignite.internal.pagemem.backup.BackupMessage;
 import org.apache.ignite.internal.pagemem.impl.PageMemoryNoStoreImpl;
+import org.apache.ignite.internal.processors.cache.CacheState;
 import org.apache.ignite.internal.processors.cache.GridCacheSharedManagerAdapter;
 import org.apache.ignite.internal.util.future.GridFutureAdapter;
 import org.apache.ignite.internal.util.typedef.internal.U;
@@ -63,13 +65,6 @@ public class IgniteCacheDatabaseSharedManager extends GridCacheSharedManagerAdap
     @Override protected void stop0(boolean cancel) {
         if (pageMem != null)
             pageMem.stop();
-    }
-
-    /**
-     *
-     */
-    public boolean persistenceEnabled() {
-        return false;
     }
 
     /**
@@ -122,6 +117,21 @@ public class IgniteCacheDatabaseSharedManager extends GridCacheSharedManagerAdap
         }
 
         return null;
+    }
+
+    /**
+     * @return {@code True} if persistence is enabled.
+     */
+    public boolean persistenceEnabled() {
+        return false;
+    }
+
+    /**
+     * @param cfg Cache configuration.
+     * @return Cache default start state.
+     */
+    public CacheState cacheDefaultState(CacheConfiguration cfg) {
+        return CacheState.ACTIVE;
     }
 
     /**

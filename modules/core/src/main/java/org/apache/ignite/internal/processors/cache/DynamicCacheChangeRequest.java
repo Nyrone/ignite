@@ -34,6 +34,8 @@ public class DynamicCacheChangeRequest implements Serializable {
     /** */
     private static final long serialVersionUID = 0L;
 
+    private UUID requestId;
+
     /** Start ID. */
     private IgniteUuid deploymentId;
 
@@ -71,6 +73,9 @@ public class DynamicCacheChangeRequest implements Serializable {
     /** */
     private UUID rcvdFrom;
 
+    /** Cache state. */
+    private CacheState state;
+
     /** */
     private transient boolean exchangeNeeded;
 
@@ -83,9 +88,14 @@ public class DynamicCacheChangeRequest implements Serializable {
      * @param cacheName Cache stop name.
      * @param initiatingNodeId Initiating node ID.
      */
-    public DynamicCacheChangeRequest(String cacheName, UUID initiatingNodeId) {
+    public DynamicCacheChangeRequest(UUID requestId, String cacheName, UUID initiatingNodeId) {
+        this.requestId = requestId;
         this.cacheName = cacheName;
         this.initiatingNodeId = initiatingNodeId;
+    }
+
+    public UUID requestId() {
+        return requestId;
     }
 
     /**
@@ -149,6 +159,13 @@ public class DynamicCacheChangeRequest implements Serializable {
      */
     public boolean start() {
         return !template && startCfg != null;
+    }
+
+    /**
+     * @return {@code True} if this is a cache activation request.
+     */
+    public boolean activation() {
+        return state != null;
     }
 
     /**
@@ -282,6 +299,20 @@ public class DynamicCacheChangeRequest implements Serializable {
      */
     @Nullable public UUID receivedFrom() {
         return rcvdFrom;
+    }
+
+    /**
+     * @return Cache state.
+     */
+    public CacheState state() {
+        return state;
+    }
+
+    /**
+     * @param state Cache state.
+     */
+    public void state(CacheState state) {
+        this.state = state;
     }
 
     /** {@inheritDoc} */

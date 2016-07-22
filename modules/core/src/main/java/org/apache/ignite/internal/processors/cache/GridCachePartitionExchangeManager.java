@@ -57,7 +57,6 @@ import org.apache.ignite.internal.processors.cache.distributed.dht.GridDhtTopolo
 import org.apache.ignite.internal.processors.cache.distributed.dht.preloader.GridDhtPartitionDemandMessage;
 import org.apache.ignite.internal.processors.cache.distributed.dht.preloader.GridDhtPartitionExchangeId;
 import org.apache.ignite.internal.processors.cache.distributed.dht.preloader.GridDhtPartitionFullMap;
-import org.apache.ignite.internal.processors.cache.distributed.dht.preloader.GridDhtPartitionMap;
 import org.apache.ignite.internal.processors.cache.distributed.dht.preloader.GridDhtPartitionMap2;
 import org.apache.ignite.internal.processors.cache.distributed.dht.preloader.GridDhtPartitionSupplyMessageV2;
 import org.apache.ignite.internal.processors.cache.distributed.dht.preloader.GridDhtPartitionsExchangeFuture;
@@ -84,6 +83,7 @@ import org.apache.ignite.internal.util.worker.GridWorker;
 import org.apache.ignite.lang.IgniteBiInClosure;
 import org.apache.ignite.lang.IgniteProductVersion;
 import org.apache.ignite.lang.IgniteUuid;
+import org.apache.ignite.internal.managers.discovery.NodeActivatedMessage;
 import org.apache.ignite.thread.IgniteThread;
 import org.jetbrains.annotations.Nullable;
 import org.jsr166.ConcurrentHashMap8;
@@ -264,6 +264,11 @@ public class GridCachePartitionExchangeManager<K, V> extends GridCacheSharedMana
                             exchangeFuture(msg.exchangeId(), null, null, null).onAffinityChangeMessage(customEvt.eventNode(), msg);
                     }
                     else if (customEvt.customMessage() instanceof BackupMessage) {
+                        exchId = exchangeId(n.id(), affinityTopologyVersion(e), e.type());
+
+                        exchFut = exchangeFuture(exchId, e, null, null);
+                    }
+                    else if (customEvt.customMessage() instanceof NodeActivatedMessage) {
                         exchId = exchangeId(n.id(), affinityTopologyVersion(e), e.type());
 
                         exchFut = exchangeFuture(exchId, e, null, null);
@@ -735,11 +740,9 @@ public class GridCachePartitionExchangeManager<K, V> extends GridCacheSharedMana
         if (log.isDebugEnabled())
             log.debug("Refreshing partitions [oldest=" + oldest.id() + ", loc=" + cctx.localNodeId() + ']');
 
-        Collection<ClusterNode> rmts;
-
         // If this is the oldest node.
         if (oldest.id().equals(cctx.localNodeId())) {
-            rmts = CU.remoteNodes(cctx, AffinityTopologyVersion.NONE);
+            Collection<ClusterNode> rmts = CU.remoteNodes(cctx, AffinityTopologyVersion.NONE);
 
             if (log.isDebugEnabled())
                 log.debug("Refreshing partitions from oldest node: " + cctx.localNodeId());
@@ -762,23 +765,9 @@ public class GridCachePartitionExchangeManager<K, V> extends GridCacheSharedMana
     private boolean sendAllPartitions(Collection<? extends ClusterNode> nodes) {
         GridDhtPartitionsFullMessage m = new GridDhtPartitionsFullMessage(null, null, AffinityTopologyVersion.NONE);
 
-        boolean useOldApi = false;
-
-        for (ClusterNode node : nodes) {
-            if (node.version().compareTo(GridDhtPartitionMap2.SINCE) < 0)
-                useOldApi = true;
-        }
-
         for (GridCacheContext cacheCtx : cctx.cacheContexts()) {
             if (!cacheCtx.isLocal() && cacheCtx.started()) {
                 GridDhtPartitionFullMap locMap = cacheCtx.topology().partitionMap(true);
-
-                if (useOldApi) {
-                    locMap = new GridDhtPartitionFullMap(locMap.nodeId(),
-                        locMap.nodeOrder(),
-                        locMap.updateSequence(),
-                        locMap);
-                }
 
                 m.addFullPartitionsMap(cacheCtx.cacheId(), locMap);
             }
@@ -820,9 +809,6 @@ public class GridCachePartitionExchangeManager<K, V> extends GridCacheSharedMana
         for (GridCacheContext cacheCtx : cctx.cacheContexts()) {
             if (!cacheCtx.isLocal()) {
                 GridDhtPartitionMap2 locMap = cacheCtx.topology().localPartitionMap();
-
-                if (node.version().compareTo(GridDhtPartitionMap2.SINCE) < 0)
-                    locMap = new GridDhtPartitionMap(locMap.nodeId(), locMap.updateSequence(), locMap.map());
 
                 m.addLocalPartitionMap(cacheCtx.cacheId(), locMap);
             }
@@ -1303,9 +1289,9 @@ public class GridCachePartitionExchangeManager<K, V> extends GridCacheSharedMana
             IgniteInternalFuture asyncStartFut = null;
 
             while (!isCancelled()) {
-                GridDhtPartitionsExchangeFuture exchFut = null;
-
                 cnt++;
+
+                GridDhtPartitionsExchangeFuture exchFut = null;
 
                 try {
                     boolean preloadFinished = true;
@@ -1346,6 +1332,8 @@ public class GridCachePartitionExchangeManager<K, V> extends GridCacheSharedMana
                     boolean dummyReassign = exchFut.dummyReassign();
                     boolean forcePreload = exchFut.forcePreload();
 
+                    boolean activated = cctx.discovery().cacheNodeActive(cctx.localNode(), exchFut.topologyVersion());
+
                     try {
                         if (isCancelled())
                             break;
@@ -1364,32 +1352,35 @@ public class GridCachePartitionExchangeManager<K, V> extends GridCacheSharedMana
                             if (exchFut.exchangeId().nodeId().equals(cctx.localNodeId()))
                                 lastRefresh.compareAndSet(-1, U.currentTimeMillis());
 
-                            boolean changed = false;
-
                             // Just pick first worker to do this, so we don't
                             // invoke topology callback more than once for the
                             // same event.
-                            for (GridCacheContext cacheCtx : cctx.cacheContexts()) {
-                                if (cacheCtx.isLocal())
-                                    continue;
 
-                                changed |= cacheCtx.topology().afterExchange(exchFut);
+                            if (activated) {
+                                boolean changed = false;
 
-                                // Preload event notification.
-                                if (!exchFut.skipPreload() && cacheCtx.events().isRecordable(EVT_CACHE_REBALANCE_STARTED)) {
-                                    if (!cacheCtx.isReplicated() || !startEvtFired) {
-                                        DiscoveryEvent discoEvt = exchFut.discoveryEvent();
+                                for (GridCacheContext cacheCtx : cctx.cacheContexts()) {
+                                    if (cacheCtx.isLocal())
+                                        continue;
 
-                                        cacheCtx.events().addPreloadEvent(-1, EVT_CACHE_REBALANCE_STARTED,
-                                            discoEvt.eventNode(), discoEvt.type(), discoEvt.timestamp());
+                                    changed |= cacheCtx.topology().afterExchange(exchFut);
+
+                                    // Preload event notification.
+                                    if (!exchFut.skipPreload() && cacheCtx.events().isRecordable(EVT_CACHE_REBALANCE_STARTED)) {
+                                        if (!cacheCtx.isReplicated() || !startEvtFired) {
+                                            DiscoveryEvent discoEvt = exchFut.discoveryEvent();
+
+                                            cacheCtx.events().addPreloadEvent(-1, EVT_CACHE_REBALANCE_STARTED,
+                                                discoEvt.eventNode(), discoEvt.type(), discoEvt.timestamp());
+                                        }
                                     }
                                 }
+
+                                startEvtFired = true;
+
+                                if (!cctx.kernalContext().clientNode() && changed && futQ.isEmpty())
+                                    refreshPartitions();
                             }
-
-                            startEvtFired = true;
-
-                            if (!cctx.kernalContext().clientNode() && changed && futQ.isEmpty())
-                                refreshPartitions();
                         }
                         else {
                             if (log.isDebugEnabled())
@@ -1402,10 +1393,13 @@ public class GridCachePartitionExchangeManager<K, V> extends GridCacheSharedMana
                             }
                         }
 
-                        if (!exchFut.skipPreload()) {
+                        if (activated && !exchFut.skipPreload()) {
                             assignsMap = new HashMap<>();
 
                             for (GridCacheContext cacheCtx : cctx.cacheContexts()) {
+                                if (cacheCtx.state() == CacheState.INACTIVE)
+                                    continue;
+
                                 long delay = cacheCtx.config().getRebalanceDelay();
 
                                 GridDhtPreloaderAssignments assigns = null;
@@ -1422,6 +1416,9 @@ public class GridCachePartitionExchangeManager<K, V> extends GridCacheSharedMana
                         // Must flip busy flag before assignments are given to demand workers.
                         busy = false;
                     }
+
+                    if (!activated)
+                        continue;
 
                     if (assignsMap != null) {
                         int size = assignsMap.size();
@@ -1444,14 +1441,14 @@ public class GridCachePartitionExchangeManager<K, V> extends GridCacheSharedMana
                         }
 
                         Callable<Boolean> marshR = null;
-                        List<Callable<Boolean>> orderedRs = new ArrayList<>(size);
+                        Collection<Callable<Boolean>> orderedRs = new ArrayList<>(size);
 
                         //Ordered rebalance scheduling.
                         for (Integer order : orderMap.keySet()) {
                             for (Integer cacheId : orderMap.get(order)) {
                                 GridCacheContext<K, V> cacheCtx = cctx.cacheContext(cacheId);
 
-                                List<String> waitList = new ArrayList<>(size - 1);
+                                Collection<String> waitList = new ArrayList<>(size - 1);
 
                                 for (List<Integer> cIds : orderMap.headMap(order).values()) {
                                     for (Integer cId : cIds)
@@ -1492,7 +1489,7 @@ public class GridCachePartitionExchangeManager<K, V> extends GridCacheSharedMana
                                     }
                                     catch (Exception ex) {
                                         if (log.isDebugEnabled())
-                                            log.debug("Failed to send initial demand request to node");
+                                            log.debug("Failed to send initial demand request to node: " + ex);
 
                                         continue;
                                     }
@@ -1517,7 +1514,7 @@ public class GridCachePartitionExchangeManager<K, V> extends GridCacheSharedMana
                                         }
                                         catch (Exception ex) {
                                             if (log.isDebugEnabled())
-                                                log.debug("Failed to send initial demand request to node");
+                                                log.debug("Failed to send initial demand request to node: " + ex);
 
                                             return false;
                                         }
@@ -1543,7 +1540,7 @@ public class GridCachePartitionExchangeManager<K, V> extends GridCacheSharedMana
                 catch (IgniteInterruptedCheckedException e) {
                     throw e;
                 }
-                catch (IgniteClientDisconnectedCheckedException e) {
+                catch (IgniteClientDisconnectedCheckedException ignore) {
                     return;
                 }
                 catch (IgniteCheckedException e) {

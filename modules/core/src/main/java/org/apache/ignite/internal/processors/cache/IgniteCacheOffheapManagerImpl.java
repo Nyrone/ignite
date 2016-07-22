@@ -252,7 +252,8 @@ public class IgniteCacheOffheapManagerImpl extends GridCacheManagerAdapter imple
     }
 
     /** {@inheritDoc} */
-    @Override public long entriesCount(boolean primary, boolean backup, AffinityTopologyVersion topVer) throws IgniteCheckedException {
+    @Override public long entriesCount(boolean primary, boolean backup,
+        AffinityTopologyVersion topVer) throws IgniteCheckedException {
         if (cctx.isLocal())
             return 0; // TODO: GG-11208.
         else {
@@ -313,40 +314,40 @@ public class IgniteCacheOffheapManagerImpl extends GridCacheManagerAdapter imple
             }
 
             final Set<Integer> parts = primary ? cctx.affinity().primaryPartitions(cctx.localNodeId(), topVer) :
-                    cctx.affinity().backupPartitions(cctx.localNodeId(), topVer);
+                cctx.affinity().backupPartitions(cctx.localNodeId(), topVer);
 
             return F.iterator(it, new IgniteClosure<GridDhtLocalPartition, CacheDataStore>() {
-                        @Override public CacheDataStore apply(GridDhtLocalPartition part) {
-                            return part.dataStore();
-                        }
-                    }, true,
-                    new IgnitePredicate<GridDhtLocalPartition>() {
-                        @Override public boolean apply(GridDhtLocalPartition part) {
-                            return parts.contains(part.id());
-                        }
-                    });
+                    @Override public CacheDataStore apply(GridDhtLocalPartition part) {
+                        return part.dataStore();
+                    }
+                }, true,
+                new IgnitePredicate<GridDhtLocalPartition>() {
+                    @Override public boolean apply(GridDhtLocalPartition part) {
+                        return parts.contains(part.id());
+                    }
+                });
         }
     }
 
     /** {@inheritDoc} */
     @Override public void update(
-            KeyCacheObject key,
-            CacheObject val,
-            GridCacheVersion ver,
-            long expireTime,
-            int partId,
-            GridDhtLocalPartition part
+        KeyCacheObject key,
+        CacheObject val,
+        GridCacheVersion ver,
+        long expireTime,
+        int partId,
+        GridDhtLocalPartition part
     ) throws IgniteCheckedException {
         dataStore(part).update(key, partId, val, ver, expireTime);
     }
 
     /** {@inheritDoc} */
     @Override public void remove(
-            KeyCacheObject key,
-            CacheObject prevVal,
-            GridCacheVersion prevVer,
-            int partId,
-            GridDhtLocalPartition part
+        KeyCacheObject key,
+        CacheObject prevVal,
+        GridCacheVersion prevVer,
+        int partId,
+        GridDhtLocalPartition part
     ) throws IgniteCheckedException {
         dataStore(part).remove(key, prevVal, prevVer, partId);
     }
@@ -401,7 +402,7 @@ public class IgniteCacheOffheapManagerImpl extends GridCacheManagerAdapter imple
     @Override public void clear(boolean readers) {
         GridCacheVersion obsoleteVer = null;
 
-        GridIterator<CacheDataRow>  it = rowsIterator(true, true, null);
+        GridIterator<CacheDataRow> it = rowsIterator(true, true, null);
 
         while (it.hasNext()) {
             KeyCacheObject key = it.next().key();
@@ -420,6 +421,16 @@ public class IgniteCacheOffheapManagerImpl extends GridCacheManagerAdapter imple
             catch (IgniteCheckedException e) {
                 U.error(log, "Failed to clear cache entry: " + key, e);
             }
+        }
+    }
+
+    @Override public void clear(GridDhtLocalPartition part) throws IgniteCheckedException {
+        GridIterator<CacheDataRow> iterator = iterator(part.id());
+
+        while (iterator.hasNext()) {
+            CacheDataRow row = iterator.next();
+
+            remove(row.key(), row.value(), row.version(), part.id(), part);
         }
     }
 
@@ -448,7 +459,7 @@ public class IgniteCacheOffheapManagerImpl extends GridCacheManagerAdapter imple
      * @throws IgniteCheckedException If failed.
      */
     @SuppressWarnings("unchecked")
-    @Override  public <K, V> GridCloseableIterator<Cache.Entry<K, V>> entriesIterator(final boolean primary,
+    @Override public <K, V> GridCloseableIterator<Cache.Entry<K, V>> entriesIterator(final boolean primary,
         final boolean backup,
         final AffinityTopologyVersion topVer,
         final boolean keepBinary) throws IgniteCheckedException {
@@ -529,7 +540,8 @@ public class IgniteCacheOffheapManagerImpl extends GridCacheManagerAdapter imple
     }
 
     /** {@inheritDoc} */
-    @Override public GridIterator<CacheDataRow> iterator(boolean primary, boolean backups, final AffinityTopologyVersion topVer)
+    @Override public GridIterator<CacheDataRow> iterator(boolean primary, boolean backups,
+        final AffinityTopologyVersion topVer)
         throws IgniteCheckedException {
         return rowsIterator(primary, backups, topVer);
     }
@@ -1115,7 +1127,8 @@ public class IgniteCacheOffheapManagerImpl extends GridCacheManagerAdapter imple
         }
 
         /** {@inheritDoc} */
-        @Override public void store(ByteBuffer dst, int dstIdx, BPlusIO<KeySearchRow> srcIo, ByteBuffer src, int srcIdx) {
+        @Override public void store(ByteBuffer dst, int dstIdx, BPlusIO<KeySearchRow> srcIo, ByteBuffer src,
+            int srcIdx) {
             int hash = ((RowLinkIO)srcIo).getHash(src, srcIdx);
             long link = ((RowLinkIO)srcIo).getLink(src, srcIdx);
 
@@ -1124,7 +1137,7 @@ public class IgniteCacheOffheapManagerImpl extends GridCacheManagerAdapter imple
 
         /** {@inheritDoc} */
         @Override public long getLink(ByteBuffer buf, int idx) {
-            assert idx < getCount(buf): idx;
+            assert idx < getCount(buf) : idx;
 
             return buf.getLong(offset(idx));
         }
@@ -1176,7 +1189,7 @@ public class IgniteCacheOffheapManagerImpl extends GridCacheManagerAdapter imple
 
         /** {@inheritDoc} */
         @Override public long getLink(ByteBuffer buf, int idx) {
-            assert idx < getCount(buf): idx;
+            assert idx < getCount(buf) : idx;
 
             return buf.getLong(offset(idx));
         }

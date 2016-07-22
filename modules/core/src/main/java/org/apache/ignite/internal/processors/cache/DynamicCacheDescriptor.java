@@ -81,6 +81,9 @@ public class DynamicCacheDescriptor {
     /** */
     private AffinityTopologyVersion rcvdFromVer;
 
+    /** */
+    private CacheState cacheState;
+
     /**
      * @param ctx Context.
      * @param cacheCfg Cache configuration.
@@ -300,6 +303,20 @@ public class DynamicCacheDescriptor {
      */
     @Nullable public UUID receivedFrom() {
         return rcvdFrom;
+    }
+
+    /**
+     * @return Cache state.
+     */
+    public CacheState state() {
+        return cacheState;
+    }
+
+    /**
+     * @param cacheState Cache state.
+     */
+    public void state(CacheState cacheState) {
+        this.cacheState = cacheState;
     }
 
     /** {@inheritDoc} */

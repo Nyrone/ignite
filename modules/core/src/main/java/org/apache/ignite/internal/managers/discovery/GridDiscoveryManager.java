@@ -399,7 +399,7 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
     @Override protected void onKernalStart0() throws IgniteCheckedException {
         if (Boolean.TRUE.equals(ctx.config().isClientMode()) && !getSpi().isClientMode())
             ctx.performance().add("Enable client mode for TcpDiscoverySpi " +
-                    "(set TcpDiscoverySpi.forceServerMode to false)");
+                "(set TcpDiscoverySpi.forceServerMode to false)");
     }
 
     /** {@inheritDoc} */
@@ -472,6 +472,8 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
             @Override public void onLocalNodeInitialized(ClusterNode locNode) {
                 for (IgniteInClosure<ClusterNode> lsnr : localNodeInitLsnrs)
                     lsnr.apply(locNode);
+
+                ((ClusterNodeEx)locNode).cacheActive(ctx.cache().context().localNodeActiveOnStart());
             }
 
             @Override public void onDiscovery(
@@ -532,11 +534,14 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
                     }
 
                     nextTopVer = new AffinityTopologyVersion(topVer, minorTopVer);
+
+                    if (verChanged)
+                        ctx.cache().onDiscoveryEvent(type, node, nextTopVer, customMsg);
                 }
                 else {
                     nextTopVer = new AffinityTopologyVersion(topVer, minorTopVer);
 
-                    ctx.cache().onDiscoveryEvent(type, node, nextTopVer);
+                    ctx.cache().onDiscoveryEvent(type, node, nextTopVer, null);
                 }
 
                 if (type == DiscoveryCustomEvent.EVT_DISCOVERY_CUSTOM_EVT) {
@@ -554,6 +559,9 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
                             }
                         }
                     }
+
+                    if (customMsg instanceof NodeActivatedMessage)
+                        ((ClusterNodeEx)node).cacheActive(true);
                 }
 
                 // Put topology snapshot into discovery history.
@@ -752,7 +760,8 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
      * @param msgCls Message class.
      * @param lsnr Custom event listener.
      */
-    public <T extends DiscoveryCustomMessage> void setCustomEventListener(Class<T> msgCls, CustomEventListener<T> lsnr) {
+    public <T extends DiscoveryCustomMessage> void setCustomEventListener(Class<T> msgCls,
+        CustomEventListener<T> lsnr) {
         List<CustomEventListener<DiscoveryCustomMessage>> list = customEvtLsnrs.get(msgCls);
 
         if (list == null) {
@@ -770,6 +779,11 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
      */
     public void addLocalNodeInitializedEventListener(IgniteInClosure<ClusterNode> lsnr) {
         localNodeInitLsnrs.add(lsnr);
+    }
+
+    /** {@inheritDoc} */
+    @Override public DiscoveryDataExchangeType discoveryDataType() {
+        return DiscoveryDataExchangeType.DISCOVERY_PROC;
     }
 
     /**
@@ -1036,7 +1050,7 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
 
         Boolean locMarshStrSerVer2 = locNode.attribute(ATTR_MARSHALLER_USE_BINARY_STRING_SER_VER_2);
         boolean locMarshStrSerVer2Bool = locMarshStrSerVer2 == null ?
-            false /* turned on and added to the attributes list by default only when BinaryMarshaller is used. */:
+            false /* turned on and added to the attributes list by default only when BinaryMarshaller is used. */ :
             locMarshStrSerVer2;
 
         boolean locDelayAssign = locNode.attribute(ATTR_LATE_AFFINITY_ASSIGNMENT);
@@ -1125,7 +1139,7 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
 
             if (locDelayAssign != rmtLateAssign) {
                 throw new IgniteCheckedException("Remote node has cache affinity assignment mode different from local " +
-                    "[locId8=" +  U.id8(locNode.id()) +
+                    "[locId8=" + U.id8(locNode.id()) +
                     ", locDelayAssign=" + locDelayAssign +
                     ", rmtId8=" + U.id8(n.id()) +
                     ", rmtLateAssign=" + rmtLateAssign +
@@ -1579,6 +1593,14 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
     }
 
     /**
+     * @param topVer Topology version
+     * @return All activated nodes for given topology version.
+     */
+    public boolean cacheNodeActive(ClusterNode node, AffinityTopologyVersion topVer) {
+        return resolveDiscoCache(null, topVer).aliveServerNodesWithCaches(topVer.topologyVersion()).contains(node);
+    }
+
+    /**
      * Gets node from history for given topology version.
      *
      * @param topVer Topology version.
@@ -1955,6 +1977,16 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
         finally {
             busyLock.leaveBusy();
         }
+    }
+
+    /**
+     * Activates local node.
+     */
+    public void activate() throws IgniteCheckedException {
+        if (ctx.clientNode() || ctx.isDaemon())
+            return;
+
+        sendCustomEvent(new NodeActivatedMessage(ctx.localNodeId()));
     }
 
     /**
@@ -2673,7 +2705,9 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
 
             List<ClusterNode> srvNodes = new ArrayList<>();
 
-            for (ClusterNode node : allNodes) {
+            for (ClusterNode n : allNodes) {
+                ClusterNodeEx node = (ClusterNodeEx)n;
+
                 assert node.order() != 0 : "Invalid node order [locNode=" + loc + ", node=" + node + ']';
                 assert !node.isDaemon();
 
@@ -2722,7 +2756,7 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
                     if (alive(node.id())) {
                         aliveNodesWithCaches.add(node);
 
-                        if (!CU.clientNode(node)) {
+                        if (!CU.clientNode(node) && node.cacheActive()) {
                             aliveSrvNodesWithCaches.add(node);
 
                             if (!loc.id().equals(node.id()))
@@ -3048,7 +3082,7 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
     /**
      * Cache predicate.
      */
-    private static class CachePredicate {
+    private class CachePredicate {
         /** Cache filter. */
         private final IgnitePredicate<ClusterNode> cacheFilter;
 

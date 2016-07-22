@@ -179,6 +179,8 @@ public interface IgniteCacheOffheapManager extends GridCacheManager {
      */
     public void clear(boolean readers);
 
+    public void clear(GridDhtLocalPartition part) throws IgniteCheckedException;
+
     /**
      * @param part Partition.
      * @return Number of entries in given partition.

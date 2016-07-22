@@ -30,6 +30,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.IgniteLogger;
 import org.apache.ignite.cluster.ClusterNode;
+import org.apache.ignite.events.DiscoveryEvent;
 import org.apache.ignite.internal.IgniteInterruptedCheckedException;
 import org.apache.ignite.internal.processors.affinity.AffinityTopologyVersion;
 import org.apache.ignite.internal.processors.cache.GridCacheSharedContext;
@@ -127,7 +128,7 @@ public class GridClientPartitionTopology implements GridDhtPartitionTopology {
     /**
      * @return Full map string representation.
      */
-    @SuppressWarnings( {"ConstantConditions"})
+    @SuppressWarnings({"ConstantConditions"})
     private String fullMapString() {
         return node2part == null ? "null" : FULL_MAP_DEBUG ? node2part.toFullString() : node2part.toString();
     }
@@ -136,20 +137,18 @@ public class GridClientPartitionTopology implements GridDhtPartitionTopology {
      * @param map Map to get string for.
      * @return Full map string representation.
      */
-    @SuppressWarnings( {"ConstantConditions"})
+    @SuppressWarnings({"ConstantConditions"})
     private String mapString(GridDhtPartitionMap2 map) {
         return map == null ? "null" : FULL_MAP_DEBUG ? map.toFullString() : map.toString();
     }
 
-    /**
-     * @return Cache ID.
-     */
-    public int cacheId() {
+    /** {@inheritDoc} */
+    @Override public int cacheId() {
         return cacheId;
     }
 
     /** {@inheritDoc} */
-    @SuppressWarnings( {"LockAcquiredButNotSafelyReleased"})
+    @SuppressWarnings({"LockAcquiredButNotSafelyReleased"})
     @Override public void readLock() {
         lock.readLock().lock();
     }
@@ -433,7 +432,8 @@ public class GridClientPartitionTopology implements GridDhtPartitionTopology {
      * @param states Additional partition states.
      * @return List of nodes for the partition.
      */
-    private List<ClusterNode> nodes(int p, AffinityTopologyVersion topVer, GridDhtPartitionState state, GridDhtPartitionState... states) {
+    private List<ClusterNode> nodes(int p, AffinityTopologyVersion topVer, GridDhtPartitionState state,
+        GridDhtPartitionState... states) {
         Collection<UUID> allIds = topVer.topologyVersion() > 0 ? F.nodeIds(CU.allNodes(cctx, topVer)) : null;
 
         lock.readLock().lock();
@@ -578,7 +578,7 @@ public class GridClientPartitionTopology implements GridDhtPartitionTopology {
                     }
                 }
 
-                for (Iterator<UUID> it = partMap.keySet().iterator(); it.hasNext();) {
+                for (Iterator<UUID> it = partMap.keySet().iterator(); it.hasNext(); ) {
                     UUID nodeId = it.next();
 
                     if (!cctx.discovery().alive(nodeId)) {
@@ -731,6 +731,25 @@ public class GridClientPartitionTopology implements GridDhtPartitionTopology {
         }
     }
 
+    /** {@inheritDoc} */
+    @Override public boolean detectLostPartitions(DiscoveryEvent discoEvt) {
+        assert false;
+
+        return false;
+    }
+
+    /** {@inheritDoc} */
+    @Override public void resetLostPartitions() {
+        assert false;
+    }
+
+    /** {@inheritDoc} */
+    @Override public Collection<Integer> lostPartitions() {
+        assert false;
+
+        return Collections.emptyList();
+    }
+
     /**
      * Updates value for single partition.
      *
@@ -869,6 +888,28 @@ public class GridClientPartitionTopology implements GridDhtPartitionTopology {
         }
         finally {
             lock.readLock().unlock();
+        }
+    }
+
+    /** {@inheritDoc} */
+    @Override public void setOwners(int p, Set<UUID> owners) {
+        lock.writeLock().lock();
+
+        try {
+            for (Map.Entry<UUID, GridDhtPartitionMap2> e : node2part.entrySet()) {
+                if (!e.getValue().containsKey(p))
+                    continue;
+
+                if (e.getValue().get(p) == OWNING && !owners.contains(e.getKey()))
+                    e.getValue().put(p, MOVING);
+                else if (owners.contains(e.getKey()))
+                    e.getValue().put(p, OWNING);
+            }
+
+            part2node.put(p, owners);
+        }
+        finally {
+            lock.writeLock().unlock();
         }
     }
 

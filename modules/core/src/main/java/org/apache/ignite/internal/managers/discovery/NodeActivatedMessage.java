@@ -13,46 +13,53 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
-package org.apache.ignite.internal.processors.cache.distributed.dht;
+package org.apache.ignite.internal.managers.discovery;
 
+import java.util.UUID;
+import org.apache.ignite.lang.IgniteUuid;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Partition states.
+ * Message for node activation.
  */
-public enum GridDhtPartitionState {
-    /** Partition is being loaded from another node. */
-    MOVING,
+public class NodeActivatedMessage implements DiscoveryCustomMessage {
+    /** */
+    private final IgniteUuid id = IgniteUuid.randomUuid();
 
-    /** This node is either a primary or backup owner. */
-    OWNING,
-
-    /** This node is neither primary or back up owner. */
-    RENTING,
-
-    /** Partition has been evicted from cache. */
-    EVICTED,
-
-    /** Partition state is invalid, partition should not be used. */
-    LOST;
-
-    /** Enum values. */
-    private static final GridDhtPartitionState[] VALS = values();
+    /** */
+    private final UUID nodeId;
 
     /**
-     * @param ord Ordinal value.
-     * @return Enum value.
+     * Constructor
+     * @param nodeId ID of activated node.
      */
-    @Nullable public static GridDhtPartitionState fromOrdinal(int ord) {
-        return ord < 0 || ord >= VALS.length ? null : VALS[ord];
+    public NodeActivatedMessage(UUID nodeId) {
+        this.nodeId = nodeId;
     }
 
     /**
-     * @return {@code True} if state is active or owning.
+     * Node ID.
+     * @return ID of activated node.
      */
-    public boolean active() {
-        return this != EVICTED;
+    public UUID nodeId() {
+        return nodeId;
+    }
+
+    /** {@inheritDoc} */
+    @Override public IgniteUuid id() {
+        return id;
+    }
+
+    /** {@inheritDoc} */
+    @Nullable @Override public DiscoveryCustomMessage ackMessage() {
+        return null;
+    }
+
+    /** {@inheritDoc} */
+    @Override public boolean isMutable() {
+        return false;
     }
 }
