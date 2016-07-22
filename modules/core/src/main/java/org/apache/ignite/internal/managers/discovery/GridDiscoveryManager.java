@@ -3082,7 +3082,7 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
     /**
      * Cache predicate.
      */
-    private class CachePredicate {
+    private static class CachePredicate {
         /** Cache filter. */
         private final IgnitePredicate<ClusterNode> cacheFilter;
 

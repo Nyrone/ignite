@@ -469,7 +469,10 @@ import static org.apache.ignite.internal.processors.cache.distributed.dht.GridDh
             // In case if node joins, get topology at the time of joining node.
             ClusterNode oldest = CU.oldestAliveCacheServerNode(cctx.shared(), topVer);
 
-            assert oldest != null || cctx.kernalContext().clientNode();
+            if (oldest == null)
+                return;
+
+//            assert oldest != null || cctx.kernalContext().clientNode();
 
             if (log.isDebugEnabled())
                 log.debug("Partition map beforeExchange [exchId=" + exchId + ", fullMap=" + fullMapString() + ']');

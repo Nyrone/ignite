@@ -464,16 +464,16 @@ public class GridDhtPartitionsExchangeFuture extends GridFutureAdapter<AffinityT
             if (discoEvt.type() == EVT_DISCOVERY_CUSTOM_EVT) {
                 assert discoEvt instanceof DiscoveryCustomEvent;
 
-                                DiscoveryCustomMessage customMessage = ((DiscoveryCustomEvent)discoEvt).customMessage();
+                DiscoveryCustomMessage customMessage = ((DiscoveryCustomEvent)discoEvt).customMessage();
 
-                                if (customMessage instanceof NodeActivatedMessage) {
-                                    assert !CU.clientNode(discoEvt.eventNode());
+                if (customMessage instanceof NodeActivatedMessage) {
+                    assert !CU.clientNode(discoEvt.eventNode());
 
-                                    exchange = onServerNodeEvent(crdNode);
-                                }
+                    exchange = onServerNodeEvent(crdNode);
+                }
                 else if (!F.isEmpty(reqs))
                     exchange = onCacheChangeRequest(crdNode);
-                else if (customMsg instanceof BackupMessage)
+                else if (customMessage instanceof BackupMessage)
                     exchange = onServerNodeEvent(crdNode);
                 else {
                     assert affChangeMsg != null : this;
